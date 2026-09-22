@@ -6,20 +6,22 @@ import { useStore } from "../../store/StoreContext";
 import { mkBlock } from "../../data/fixtures/documents";
 import { nowISO, uid } from "../../lib/format";
 import {
+  autoCompleteCopilotConversation,
   confirmCopilotDraft,
   createCopilotConversation,
   getCopilotConversation,
   listCopilotConversations,
   streamCopilotMessage,
+  uploadCopilotAttachment,
   type CopilotConversationDto,
   type CopilotJdFields,
 } from "./copilotApi";
-import { CREATE_CHIPS, EDIT_CHIPS, EDIT_SELECTION_CHIPS, generateEditResponse, trunc } from "./geminiLogic";
+import { CREATE_EXAMPLES, EDIT_CHIPS, EDIT_SELECTION_CHIPS, generateEditResponse, trunc } from "./geminiLogic";
 import { VoiceInputButton, type VoiceInputStatus } from "./VoiceInputButton";
 import { mergeVoiceTranscript } from "../../lib/voice-stream";
 import { fmtRelative } from "../../lib/format";
 import type { Audience, Requirement } from "../../data/types";
-import type { GeminiDraft, GeminiMsg } from "../../store/types";
+import type { ConversationActionOption, GeminiDraft, GeminiMsg } from "../../store/types";
 
 /** Converts a fetched conversation's raw messages back into the panel's bubble shapes. There's no
  * per-message phase snapshot server-side, so a conversation that's currently ready to confirm gets its
@@ -55,6 +57,17 @@ export function chatKey(ctx: GeminiCtx) {
   return ctx.mode === "create" ? "new" : `${ctx.jobId}:${ctx.audience}`;
 }
 
+// Ported verbatim from the old project's `copilot.intro.greeting` catalog entry — the AI itself only
+// ever replies in Chinese for this feature (the backend prompts are Chinese-only), so this intro isn't
+// translated for the English UI toggle either.
+const JD_STEWARD_GREETING =
+  "你好，我是你的 JD 管家。很高兴陪你一起把这次招聘想清楚、写明白。告诉我你想找什么样的人，哪怕现在只有一个岗位名称也没关系，我们可以从已有信息开始，慢慢把它整理成一份专业、真实又有吸引力的 JD。";
+
+// Matches the backend's `jd-autotake` skill exactly: this literal string is both the button's tooltip
+// and the synthetic user-turn text sent to `/auto-complete`, so the chat bubble reads the same as the
+// action the user just took (same pattern as the old project's autotake trigger copy).
+const AUTO_COMPLETE_LABEL = "自动补全并优化内容";
+
 /**
  * "Ask Copilot" — the Gemini-in-Docs-style voice/chat drawer. A parallel
  * entry point to the in-document selection Copilot: it drafts content here
@@ -74,8 +87,10 @@ export function GeminiPanel({ ctx }: { ctx: GeminiCtx }) {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyError, setHistoryError] = useState("");
   const [historyItems, setHistoryItems] = useState<CopilotConversationDto[]>([]);
+  const [attaching, setAttaching] = useState(false);
   const voiceBaseInputRef = useRef<string | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const attachFileInputRef = useRef<HTMLInputElement>(null);
   const timers = useRef<number[]>([]);
 
   useEffect(() => {
@@ -217,6 +232,81 @@ export function GeminiPanel({ ctx }: { ctx: GeminiCtx }) {
     }
   };
 
+  const handleAttachFile = async (file: File) => {
+    setAttaching(true);
+    push({ role: "user", text: `[${t("Uploaded file")}] ${file.name}` });
+    push({ role: "thinking" });
+    try {
+      let conversationId = state.geminiConversationIds[key];
+      if (!conversationId) {
+        const conversation = await createCopilotConversation();
+        conversationId = conversation.id;
+        mutate((draft) => {
+          draft.geminiConversationIds = { ...draft.geminiConversationIds, [key]: conversationId! };
+        });
+      }
+      const result = await uploadCopilotAttachment(conversationId, file);
+      const lastReply = result.messages[result.messages.length - 1];
+      const finalReply: GeminiMsg =
+        result.phase === "ready_to_confirm"
+          ? { role: "ai", draft: jdFieldsToGeminiDraft(result.fields) }
+          : { role: "ai", text: lastReply?.text || "" };
+      mutate((draft) => {
+        const list = (draft.geminiChats[key] ?? []).filter((m) => m.role !== "thinking");
+        draft.geminiChats = { ...draft.geminiChats, [key]: [...list, finalReply] };
+      });
+    } catch (error) {
+      mutate((draft) => {
+        const list = (draft.geminiChats[key] ?? []).filter((m) => m.role !== "thinking");
+        const errorReply: GeminiMsg = {
+          role: "ai",
+          text: error instanceof Error ? error.message : t("Couldn't process this file. Please try again."),
+        };
+        draft.geminiChats = { ...draft.geminiChats, [key]: [...list, errorReply] };
+      });
+    } finally {
+      setAttaching(false);
+    }
+  };
+
+  const handleAutoComplete = async () => {
+    if (busy) return;
+    setBusy(true);
+    push({ role: "user", text: AUTO_COMPLETE_LABEL });
+    push({ role: "thinking" });
+    try {
+      let conversationId = state.geminiConversationIds[key];
+      if (!conversationId) {
+        const conversation = await createCopilotConversation();
+        conversationId = conversation.id;
+        mutate((draft) => {
+          draft.geminiConversationIds = { ...draft.geminiConversationIds, [key]: conversationId! };
+        });
+      }
+      const result = await autoCompleteCopilotConversation(conversationId);
+      const lastReply = result.messages[result.messages.length - 1];
+      const finalReply: GeminiMsg =
+        result.phase === "ready_to_confirm"
+          ? { role: "ai", draft: jdFieldsToGeminiDraft(result.fields) }
+          : { role: "ai", text: lastReply?.text || "" };
+      mutate((draft) => {
+        const list = (draft.geminiChats[key] ?? []).filter((m) => m.role !== "thinking");
+        draft.geminiChats = { ...draft.geminiChats, [key]: [...list, finalReply] };
+      });
+    } catch (error) {
+      mutate((draft) => {
+        const list = (draft.geminiChats[key] ?? []).filter((m) => m.role !== "thinking");
+        const errorReply: GeminiMsg = {
+          role: "ai",
+          text: error instanceof Error ? error.message : t("Sorry, Copilot couldn’t process that just now. Please try again."),
+        };
+        draft.geminiChats = { ...draft.geminiChats, [key]: [...list, errorReply] };
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const insert = (text: string, mode: "append" | "replace") => {
     if (!ctx.jobId) return;
     const jobId = ctx.jobId;
@@ -331,9 +421,17 @@ export function GeminiPanel({ ctx }: { ctx: GeminiCtx }) {
         tag: "AI",
       });
     });
-    closeModal();
     say(`${t("Created")} “${d.title}” ${t("from your description")}`);
-    navigate(`/jobs/${newId}/document`);
+    push({
+      role: "ai",
+      text: t("The JD is created. You can"),
+      options: [{ id: `view-jd:${newId}`, label: t("View the created JD"), href: `/jobs/${newId}/document` }],
+    });
+  };
+
+  const handleSelectOption = (option: ConversationActionOption) => {
+    closeModal();
+    navigate(option.href);
   };
 
   const title = ctx.mode === "create" ? t("Ask Copilot — Create a job") : t("Ask Copilot");
@@ -345,7 +443,7 @@ export function GeminiPanel({ ctx }: { ctx: GeminiCtx }) {
         : t(
             "Ask for a rewrite, a new section, or anything else — Copilot drafts it here first, nothing changes in the document until you insert it.",
           );
-  const chips = ctx.mode === "create" ? CREATE_CHIPS : ctx.selText ? EDIT_SELECTION_CHIPS : EDIT_CHIPS;
+  const chips = ctx.selText ? EDIT_SELECTION_CHIPS : EDIT_CHIPS;
 
   return (
     <div className="gemini-panel">
@@ -394,63 +492,122 @@ export function GeminiPanel({ ctx }: { ctx: GeminiCtx }) {
       ) : (
         <div className="gemini-messages" ref={messagesRef}>
           {msgs.length === 0 ? (
-            <div className="gm-empty">
-              <Icon name="auto_awesome" size={34} />
-              <div style={{ marginTop: 6 }}>{t("Tap the microphone and describe what you need, or type below.")}</div>
-              <div className="gm-chip-row">
-                {chips.map((c) => (
-                  <div key={c} className="gm-chip" onClick={() => send(c)}>
-                    {t(c)}
-                  </div>
-                ))}
+            ctx.mode === "create" ? (
+              <div className="gm-intro">
+                <p>{t(JD_STEWARD_GREETING)}</p>
+                <div className="gm-example-list">
+                  <p className="gm-example-label">{t("You could say")}</p>
+                  {CREATE_EXAMPLES.map((example) => (
+                    <button key={example} className="gm-example" type="button" onClick={() => send(example)}>
+                      <Icon name="subdirectory_arrow_right" size={16} />
+                      <span>{example}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="gm-empty">
+                <Icon name="auto_awesome" size={34} />
+                <div style={{ marginTop: 6 }}>{t("Tap the microphone and describe what you need, or type below.")}</div>
+                <div className="gm-chip-row">
+                  {chips.map((c) => (
+                    <div key={c} className="gm-chip" onClick={() => send(c)}>
+                      {t(c)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
           ) : (
             msgs.map((m, i) => (
-              <GeminiMessage key={i} msg={m} showInsertActions={ctx.mode === "edit"} onInsert={insert} onCreate={createJobFromDraft} />
+              <GeminiMessage
+                key={i}
+                msg={m}
+                showInsertActions={ctx.mode === "edit"}
+                onInsert={insert}
+                onCreate={createJobFromDraft}
+                onSelectOption={handleSelectOption}
+              />
             ))
           )}
         </div>
       )}
       {!historyOpen && (
         <div className="gemini-input-wrap">
-          <div className="gm-listening-row">
-            {voiceStatus === "connecting" && (
-              <>
-                <span className="gm-dot" />
-                {t("Connecting…")}
-              </>
-            )}
-            {voiceStatus === "listening" && <VoiceWaveform level={voiceLevel} />}
-          </div>
-          <div className="gemini-input-row">
-            <VoiceInputButton
-              disabled={busy}
-              onPartialTranscript={handleVoicePartial}
-              onTranscript={handleVoiceFinal}
-              onError={handleVoiceError}
-              onStatusChange={setVoiceStatus}
-              onAudioLevelChange={setVoiceLevel}
-            />
-            <div className="gemini-text-col">
-              <textarea
-                rows={1}
-                placeholder={t("Or type instead…")}
-                value={input}
-                disabled={voiceStatus !== "idle"}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    send();
-                  }
-                }}
-                autoFocus
-              />
+          {voiceStatus === "connecting" && (
+            <div className="gm-listening-row">
+              <span className="gm-dot" />
+              {t("Connecting…")}
             </div>
-            <button className="gm-send-btn" onClick={() => send()} aria-label={t("Send")}>
-              <Icon name="send" />
-            </button>
+          )}
+          <div className="gemini-composer-shell">
+            <textarea
+              rows={1}
+              placeholder={t("Or type instead…")}
+              value={input}
+              disabled={voiceStatus !== "idle"}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              autoFocus
+            />
+            <div className="gemini-composer-footer">
+              <div className="gemini-composer-tools">
+                {ctx.mode === "create" && (
+                  <button
+                    className="gemini-composer-tool"
+                    type="button"
+                    disabled={attaching || busy}
+                    onClick={() => attachFileInputRef.current?.click()}
+                    title={t("Upload source material")}
+                    aria-label={t("Upload source material")}
+                  >
+                    <Icon name="add" />
+                  </button>
+                )}
+                {ctx.mode === "create" && (
+                  <button
+                    className="gemini-composer-tool"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void handleAutoComplete()}
+                    title={AUTO_COMPLETE_LABEL}
+                    aria-label={AUTO_COMPLETE_LABEL}
+                  >
+                    <Icon name="auto_fix_high" />
+                  </button>
+                )}
+                <input
+                  ref={attachFileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) void handleAttachFile(file);
+                  }}
+                />
+              </div>
+              <VoiceWaveform level={voiceLevel} listening={voiceStatus === "listening"} />
+              <div className="gemini-composer-actions">
+                <VoiceInputButton
+                  disabled={busy}
+                  onPartialTranscript={handleVoicePartial}
+                  onTranscript={handleVoiceFinal}
+                  onError={handleVoiceError}
+                  onStatusChange={setVoiceStatus}
+                  onAudioLevelChange={setVoiceLevel}
+                />
+                <button className="gm-send-btn" onClick={() => send()} aria-label={t("Send")}>
+                  <Icon name="send" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -463,10 +620,15 @@ const WAVE_BAR_WEIGHTS = Array.from({ length: 28 }, (_, index) => 0.5 + (index %
 /** Live audio-level bars shown in place of the textarea while listening, ported from the old
  * project's `VoiceActivityWaveform` — each bar's height is the live level scaled by a fixed per-bar
  * weight, which is what gives it its slightly uneven, organic look instead of moving as one flat block. */
-function VoiceWaveform({ level }: { level: number }) {
+function VoiceWaveform({ level, listening }: { level: number; listening: boolean }) {
   const { t } = useStore();
   return (
-    <div className="gm-wave-bars" role="status" aria-label={t("Listening…")}>
+    <div
+      className={`gm-wave-bars${listening ? " is-listening" : ""}`}
+      role={listening ? "status" : undefined}
+      aria-label={listening ? t("Listening…") : undefined}
+      aria-hidden={!listening}
+    >
       {WAVE_BAR_WEIGHTS.map((weight, index) => (
         <span key={index} className="gm-wave-bar" style={{ transform: `scaleY(${0.2 + level * weight})` }} />
       ))}
@@ -479,11 +641,13 @@ function GeminiMessage({
   showInsertActions,
   onInsert,
   onCreate,
+  onSelectOption,
 }: {
   msg: GeminiMsg;
   showInsertActions: boolean;
   onInsert: (text: string, mode: "append" | "replace") => void;
   onCreate: (draft: GeminiDraft) => void;
+  onSelectOption: (option: ConversationActionOption) => void;
 }) {
   const { t } = useStore();
   if (msg.role === "user") return <div className="gm-bubble user">{msg.text}</div>;
@@ -537,6 +701,16 @@ function GeminiMessage({
   return (
     <div className="gm-bubble ai">
       <div style={{ whiteSpace: "pre-wrap" }}>{msg.text}</div>
+      {msg.options && msg.options.length > 0 && (
+        <div className="gm-msg-options">
+          {msg.options.map((option) => (
+            <button key={option.id} type="button" className="gm-msg-option" onClick={() => onSelectOption(option)}>
+              <Icon name="subdirectory_arrow_right" size={16} />
+              <span>{option.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {showInsertActions && (
         <div className="gm-actions">
           <Button variant="primary" size="sm" onClick={() => onInsert(msg.text!, "append")}>

@@ -52,11 +52,21 @@ export interface GeminiDraft {
   pref?: string[];
 }
 
+/** A follow-up quick action shown under an assistant message, e.g. "View the created JD" after a job
+ * is created from a draft. Scoped to simple client-side navigation for now (no tab-switch-in-place or
+ * async-action kinds like the old project's `jd_output`/`candidate_matches` — this app has neither a
+ * candidate-matching feature nor an in-canvas document-tab concept to route those into). */
+export interface ConversationActionOption {
+  id: string;
+  label: string;
+  href: string;
+}
+
 export type GeminiMsg =
   | { role: "user"; text: string }
   | { role: "thinking" }
-  | { role: "ai"; text: string; canReplace?: boolean; draft?: undefined }
-  | { role: "ai"; draft: GeminiDraft; text?: undefined };
+  | { role: "ai"; text: string; canReplace?: boolean; options?: ConversationActionOption[]; draft?: undefined }
+  | { role: "ai"; draft: GeminiDraft; text?: undefined; options?: undefined };
 
 export interface AppState {
   // appearance / chrome

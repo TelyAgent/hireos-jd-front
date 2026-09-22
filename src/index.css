@@ -561,6 +561,17 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible, input:focus-vis
 .gm-chip-row{ display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:14px; }
 .gm-chip{ border:1px solid var(--border-strong); border-radius:16px; padding:7px 13px; font-size:var(--fs-xs); cursor:pointer; background:var(--surface); }
 .gm-chip:hover{ background:var(--surface-alt); }
+
+/* "Create a job" intro — ported from the old project's `.copilot-intro`/`.agent-example` (a vertical
+   list of full-width rows with a reply-arrow icon), not the pill-shaped chips edit-mode still uses. */
+.gm-intro{ display:grid; justify-items:start; gap:14px; max-width:440px; padding-top:6px; }
+.gm-intro > p{ margin:0; color:var(--text); font-size:var(--fs-sm); line-height:1.6; }
+.gm-example-list{ width:100%; display:grid; gap:8px; }
+.gm-example-label{ margin:0; color:var(--text-tertiary); font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.gm-example{ width:100%; min-height:42px; display:flex; align-items:center; gap:10px; padding:10px 12px; color:var(--text); border:1px solid var(--border); border-radius:var(--radius-md); background:var(--surface); text-align:left; cursor:pointer; }
+.gm-example:hover{ border-color:var(--border-strong); background:var(--surface-alt); }
+.gm-example .material-icons-o{ flex:0 0 auto; color:var(--text-tertiary); font-size:16px; }
+.gm-example span{ min-width:0; font-size:13px; line-height:19px; }
 .gm-bubble{ max-width:92%; border-radius:12px; padding:11px 14px; font-size:var(--fs-sm); line-height:1.5; }
 .gm-bubble.user{ align-self:flex-end; background:var(--accent-600); color:var(--text-on-accent); border-bottom-right-radius:3px; }
 .gm-bubble.ai{ align-self:flex-start; background:var(--surface-alt); border-bottom-left-radius:3px; width:100%; max-width:100%; }
@@ -572,19 +583,42 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible, input:focus-vis
 .gm-thinking span:nth-child(2){ animation-delay:.15s; } .gm-thinking span:nth-child(3){ animation-delay:.3s; }
 @keyframes gmpulse{ 0%,80%,100%{ opacity:.3; transform:scale(.8);} 40%{ opacity:1; transform:scale(1);} }
 .gm-actions{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+/* Follow-up quick actions under an assistant message (e.g. "The JD is created. You can → View the
+   created JD"), ported from the old project's `ConversationActionOptions` (reply-arrow icon + plain
+   row, separated from the message text by a thin divider) rather than the boxed `.gm-example` chips. */
+.gm-msg-options{ display:grid; gap:2px; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); }
+.gm-msg-option{ width:100%; display:flex; align-items:center; gap:8px; padding:7px 4px; color:var(--text); background:none; border:none; border-radius:var(--radius-sm); text-align:left; cursor:pointer; font-size:13px; line-height:19px; }
+.gm-msg-option:hover{ background:var(--surface); }
+.gm-msg-option .material-icons-o{ flex:0 0 auto; color:var(--text-tertiary); font-size:16px; }
 .gemini-input-wrap{ border-top:1px solid var(--border); padding:14px 20px 18px; }
-.gemini-input-row{ display:flex; align-items:flex-end; gap:10px; }
-.gm-mic-btn{ width:40px; height:40px; border-radius:50%; border:none; cursor:pointer; flex:0 0 auto; background:linear-gradient(135deg,#4285f4,#7c4dcf 55%,#d24ba0); color:#fff; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(60,30,120,.3); transition:transform .12s; }
-.gm-mic-btn:hover{ transform:scale(1.05); }
-.gm-mic-btn.listening{ animation:gmmicpulse 1.1s infinite; background:linear-gradient(135deg,#ea4335,#d24ba0); }
-@keyframes gmmicpulse{ 0%{ box-shadow:0 0 0 0 rgba(234,67,53,.45);} 70%{ box-shadow:0 0 0 14px rgba(234,67,53,0);} 100%{ box-shadow:0 0 0 0 rgba(234,67,53,0);} }
-.gm-mic-btn .material-icons-o{ font-size:20px; }
-.gemini-text-col{ flex:1; display:flex; flex-direction:column; }
-.gemini-text-col textarea{ width:100%; resize:none; min-height:40px; max-height:110px; border:1px solid var(--border-strong); border-radius:22px; padding:10px 16px; font-family:inherit; font-size:var(--fs-sm); background:var(--surface); color:var(--text); }
-.gm-listening-row{ display:flex; align-items:center; gap:8px; font-size:var(--fs-xs); color:var(--accent-600); padding:0 4px 6px; min-height:16px; }
+.gm-listening-row{ display:flex; align-items:center; gap:8px; font-size:var(--fs-xs); color:var(--accent-600); padding:0 4px 6px; }
 .gm-listening-row .gm-dot{ width:7px; height:7px; border-radius:50%; background:#ea4335; animation:gmpulse 1s infinite ease-in-out; }
-.gm-wave-bars{ display:flex; align-items:center; gap:2px; height:16px; }
-.gm-wave-bar{ width:2px; height:14px; border-radius:2px; background:linear-gradient(180deg,#4285f4,#7c4dcf 55%,#d24ba0); transform-origin:center; transition:transform .05s linear; }
-.gm-send-btn{ width:40px; height:40px; border-radius:50%; border:none; cursor:pointer; flex:0 0 auto; background:var(--accent-600); color:var(--text-on-accent); display:flex; align-items:center; justify-content:center; }
+
+/* Single rounded shell holding the textarea and its toolbar, matching the old project's
+   `.composer-shell`/`.composer-footer` layout: the input never gets replaced by anything (the mic
+   waveform included) — it just reserves space in the footer and fades in when listening. */
+.gemini-composer-shell{ display:flex; flex-direction:column; gap:6px; padding:11px 16px 8px; border:1px solid var(--border-strong); border-radius:var(--radius-xl); background:var(--surface); transition:border-color .15s, box-shadow .15s; }
+.gemini-composer-shell:focus-within{ border-color:var(--accent-600); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent-600) 20%, transparent); }
+.gemini-composer-shell textarea{ width:100%; min-height:calc(1.5em * 2); max-height:calc(1.5em * 6); padding:0; resize:none; overflow-y:auto; border:0; outline:0; background:transparent; color:var(--text); font-family:inherit; font-size:var(--fs-sm); line-height:1.5; }
+.gemini-composer-shell textarea::placeholder{ color:var(--text-tertiary); opacity:1; }
+.gemini-composer-footer{ width:100%; min-height:32px; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.gemini-composer-tools,.gemini-composer-actions{ min-width:0; display:flex; align-items:center; gap:6px; }
+.gemini-composer-actions{ margin-left:auto; }
+.gemini-composer-tool{ width:32px; height:32px; border-radius:50%; border:none; background:transparent; color:var(--text-secondary); display:flex; align-items:center; justify-content:center; cursor:pointer; }
+.gemini-composer-tool:hover{ background:var(--surface-alt); }
+.gemini-composer-tool:disabled{ opacity:.4; cursor:default; }
+
+.gm-mic-btn{ width:32px; height:32px; border-radius:50%; border:none; cursor:pointer; flex:0 0 auto; background:transparent; color:var(--text-secondary); display:flex; align-items:center; justify-content:center; transition:background-color .15s, color .15s; }
+.gm-mic-btn:hover{ background:var(--surface-alt); }
+.gm-mic-btn.listening{ color:#fff; background:linear-gradient(135deg,#ea4335,#d24ba0); animation:gmmicpulse 1.1s infinite; }
+@keyframes gmmicpulse{ 0%{ box-shadow:0 0 0 0 rgba(234,67,53,.45);} 70%{ box-shadow:0 0 0 10px rgba(234,67,53,0);} 100%{ box-shadow:0 0 0 0 rgba(234,67,53,0);} }
+.gm-mic-btn .material-icons-o{ font-size:19px; }
+
+.gm-wave-bars{ min-width:0; flex:1; display:flex; align-items:center; justify-content:center; gap:2px; opacity:0; transition:opacity .18s ease; }
+.gm-wave-bars.is-listening{ opacity:1; }
+.gm-wave-bar{ width:2px; height:18px; border-radius:999px; background:linear-gradient(180deg,#4285f4,#7c4dcf 55%,#d24ba0); transform-origin:center; transition:transform 80ms linear; }
+
+.gm-send-btn{ width:32px; height:32px; border-radius:50%; border:none; cursor:pointer; flex:0 0 auto; background:var(--accent-600); color:var(--text-on-accent); display:flex; align-items:center; justify-content:center; }
 .gm-send-btn:disabled{ opacity:.4; cursor:default; }
+.gm-send-btn .material-icons-o{ font-size:18px; }
 .gemini-hint{ font-size:var(--fs-xs); color:var(--text-tertiary); text-align:center; margin-top:8px; }

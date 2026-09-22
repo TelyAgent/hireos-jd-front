@@ -329,6 +329,7 @@ export const ZH: Record<string, string> = {
   "Loading…": "加载中…",
   "No conversations yet.": "暂无历史会话。",
   "Untitled conversation": "未命名会话",
+  "You could say": "可以这样说",
   Responsibilities: "岗位职责",
   "Requirements — must-have": "岗位要求 — 必备项",
   Preferred: "加分项",
@@ -339,6 +340,8 @@ export const ZH: Record<string, string> = {
   "Inserted into the document": "已插入到文档",
   Created: "已创建",
   "from your description": "（根据你的描述）",
+  "The JD is created. You can": "JD 已创建，你可以",
+  "View the created JD": "查看已创建的 JD",
   "We need a Growth Lead who can build our marketing function from zero, based in Ho Chi Minh City":
     "我们需要一位能从零搭建市场职能的增长负责人，驻胡志明市",
   "Senior backend engineer, strong on distributed systems, hybrid role in Hanoi":

@@ -178,3 +178,15 @@ export function confirmCopilotDraft(conversationId: string): Promise<{ conversat
     idempotencyKey: idempotencyKey("copilot-confirm"),
   });
 }
+
+/**
+ * Triggers the "auto-complete and optimize" turn: unlike a normal chat message, this asks the backend
+ * to fill in every still-missing required field with reasonable, clearly-editable suggestions in one
+ * shot rather than asking another clarifying question, landing straight on `ready_to_confirm`.
+ */
+export function autoCompleteCopilotConversation(conversationId: string): Promise<CopilotConversationDto> {
+  return request(`${BASE}/${conversationId}/auto-complete`, {
+    method: "POST",
+    idempotencyKey: idempotencyKey("copilot-autocomplete"),
+  });
+}
