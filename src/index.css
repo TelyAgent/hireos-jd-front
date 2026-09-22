@@ -406,6 +406,21 @@ a:focus-visible, button:focus-visible, [tabindex]:focus-visible, input:focus-vis
 .jw-doc .ins{ background:var(--success-bg); text-decoration:underline; text-decoration-color:var(--success-text); color:var(--success-text); }
 .jw-doc .del{ background:var(--danger-bg); text-decoration:line-through; color:var(--danger-text); }
 .jw-doc .presentation-only{ opacity:.7; }
+.jw-toolbar .tb-btn.active{ background:var(--accent-50); color:var(--accent-600); }
+.jw-toolbar .tb-btn:disabled{ opacity:.35; cursor:default; }
+.jw-toolbar .tb-btn:disabled:hover{ background:transparent; color:var(--text-secondary); }
+/* TipTap-backed block editors (see RichBlockEditor) — typography mirrors the static .docH/.docH3/.docP/
+   .docList rules above so a block looks identical whether it's being edited or just displayed. */
+.rich-block-editor{ border-radius:4px; }
+.rich-block-editor.is-focused{ box-shadow:0 0 0 2px var(--accent-300); }
+.rich-block-editor .ProseMirror{ outline:none; }
+.rich-block-editor .ProseMirror p{ margin:0; }
+.rich-block-editor.kind-h2 .ProseMirror{ font-size:22px; font-weight:600; margin:28px 0 10px; color:var(--text); }
+.jw-doc > .doc-block:first-child .rich-block-editor.kind-h2 .ProseMirror{ margin-top:0; }
+.rich-block-editor.kind-h3 .ProseMirror{ font-size:17px; font-weight:600; margin:20px 0 8px; color:var(--text); }
+.rich-block-editor.kind-p .ProseMirror{ font-size:15px; line-height:1.7; margin:0 0 12px; color:var(--text); }
+.rich-block-editor.kind-ul .ProseMirror ul{ margin:0 0 12px; padding-left:22px; }
+.rich-block-editor.kind-ul .ProseMirror li{ font-size:15px; line-height:1.7; margin-bottom:4px; }
 .mark-badge{ font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; vertical-align:super; padding:0 4px; border-radius:4px; margin-left:2px; }
 .mark-badge.ai{ background:var(--ai-bg); color:var(--ai-text); }
 .mark-badge.human{ background:var(--info-bg); color:var(--info-text); }

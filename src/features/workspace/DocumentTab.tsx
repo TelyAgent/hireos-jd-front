@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import type { Editor } from "@tiptap/react";
 import { Icon } from "../../components/ui/Icons";
 import { useStore } from "../../store/StoreContext";
-import { selectDraft, selectSuggestions, selectThreads, pendingSuggestionsFor } from "./docHelpers";
+import { selectDraft, selectSuggestions, selectThreads, pendingSuggestionsFor, ensureDraft, stripHtml } from "./docHelpers";
+import { RichBlockEditor } from "./RichBlockEditor";
 import { SidePanel } from "./SidePanel";
 import { useDocActions } from "./docActions";
 import type { Audience, DocBlock } from "../../data/types";
@@ -25,15 +27,57 @@ interface PendingSel {
 }
 
 export function DocumentTab({ jobId, audience }: { jobId: string; audience: Audience }) {
-  const { state, t, set, say } = useStore();
+  const { state, t, set, mutate } = useStore();
   const draft = selectDraft(state, jobId, audience);
   const docRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [pendingSel, setPendingSel] = useState<PendingSel | null>(null);
   const actions = useDocActions(jobId, audience);
 
+  // Rich-text editing is scoped to the Internal document's Editing mode for now (see RichBlockEditor) —
+  // Suggesting/Viewing and the External audience keep the existing static, read-only rendering.
+  const isRichEditable = state.wsMode === "editing" && audience === "internal";
+  const editorsRef = useRef(new Map<string, Editor>());
+  const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
+  const [, bumpTick] = useReducer((c: number) => c + 1, 0);
+  const saveTimerRef = useRef<number | undefined>(undefined);
+  const activeEditor = activeBlockId ? editorsRef.current.get(activeBlockId) : undefined;
+  const canFormat = isRichEditable && !!activeEditor;
+
   // Clear the floating toolbar whenever the document identity changes.
   useEffect(() => setPendingSel(null), [jobId, audience, state.wsMode]);
+  // Each RichBlockEditor registers/unregisters itself in editorsRef via its own mount/unmount effect
+  // (whichever blocks exist for the new jobId/audience naturally (de)register themselves) — this only
+  // needs to drop the now-stale "focused block" pointer from the previous document.
+  useEffect(() => setActiveBlockId(null), [jobId, audience]);
+  useEffect(() => () => window.clearTimeout(saveTimerRef.current), []);
+
+  const commitBlockText = (blockId: string, text: string | string[]) => {
+    mutate((d) => {
+      const doc = ensureDraft(d, jobId, audience);
+      const block = doc.blocks.find((b) => b.id === blockId);
+      if (!block) return;
+      block.text = text;
+      doc.revision++;
+      doc.saveState = "saving";
+    });
+    window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      mutate((d) => void (ensureDraft(d, jobId, audience).saveState = "saved"));
+    }, 500);
+  };
+
+  const convertActiveBlockToList = () => {
+    if (!activeBlockId) return;
+    mutate((d) => {
+      const doc = ensureDraft(d, jobId, audience);
+      const block = doc.blocks.find((b) => b.id === activeBlockId);
+      if (!block || block.kind === "ul") return;
+      block.kind = "ul";
+      block.text = [typeof block.text === "string" ? stripHtml(block.text) : ""];
+      doc.revision++;
+    });
+  };
 
   const onMouseUp = () => {
     // Let the browser finish updating the selection before reading it.
@@ -88,19 +132,39 @@ export function DocumentTab({ jobId, audience }: { jobId: string; audience: Audi
           </button>
         </div>
         <div className="tb-sep" />
-        <button className="tb-btn" title={t("Bold")}>
+        <button
+          className={`tb-btn${activeEditor?.isActive("bold") ? " active" : ""}`}
+          title={t("Bold")}
+          disabled={!canFormat}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => activeEditor?.chain().focus().toggleBold().run()}
+        >
           <Icon name="format_bold" />
         </button>
-        <button className="tb-btn" title={t("Italic")}>
+        <button
+          className={`tb-btn${activeEditor?.isActive("italic") ? " active" : ""}`}
+          title={t("Italic")}
+          disabled={!canFormat}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => activeEditor?.chain().focus().toggleItalic().run()}
+        >
           <Icon name="format_italic" />
         </button>
-        <button className="tb-btn" title={t("Bulleted list")}>
+        <button
+          className={`tb-btn${activeEditor?.isActive("bulletList") ? " active" : ""}`}
+          title={t("Bulleted list")}
+          disabled={!canFormat || activeEditor?.isActive("bulletList")}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={convertActiveBlockToList}
+        >
           <Icon name="format_list_bulleted" />
         </button>
         <button
           className="tb-btn"
           title={t("Undo")}
-          onClick={() => say(t("Undo creates a new draft revision — it does not remove history."))}
+          disabled={!canFormat}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => activeEditor?.chain().focus().undo().run()}
         >
           <Icon name="undo" />
         </button>
@@ -124,7 +188,7 @@ export function DocumentTab({ jobId, audience }: { jobId: string; audience: Audi
           </div>
           {outline.map((b) => (
             <div key={b.id} className="jw-outline-item" onClick={() => scrollToBlock(b.id)}>
-              {typeof b.text === "string" ? b.text : ""}
+              {typeof b.text === "string" ? stripHtml(b.text) : ""}
             </div>
           ))}
         </div>
@@ -141,7 +205,24 @@ export function DocumentTab({ jobId, audience }: { jobId: string; audience: Audi
               </div>
             )}
             {draft.blocks.map((b) => (
-              <DocBlockView key={b.id} block={b} jobId={jobId} audience={audience} />
+              <DocBlockView
+                key={b.id}
+                block={b}
+                jobId={jobId}
+                audience={audience}
+                editable={isRichEditable}
+                isActive={activeBlockId === b.id}
+                onTextChange={(text) => commitBlockText(b.id, text)}
+                onFocusBlock={() => setActiveBlockId(b.id)}
+                onEditorReady={(editor) => {
+                  editorsRef.current.set(b.id, editor);
+                  if (activeBlockId === b.id) bumpTick();
+                }}
+                onEditorDestroy={() => editorsRef.current.delete(b.id)}
+                onActivity={() => {
+                  if (activeBlockId === b.id) bumpTick();
+                }}
+              />
             ))}
           </div>
           {pendingSel && (
@@ -186,10 +267,52 @@ export function DocumentTab({ jobId, audience }: { jobId: string; audience: Audi
   );
 }
 
+/** Converts simple inline HTML (only `<strong>`/`<b>`/`<em>`/`<i>` are recognized — anything else is
+ * unwrapped to its text) produced by `RichBlockEditor` into React elements, instead of using
+ * `dangerouslySetInnerHTML`. Falls back to returning the string as-is when there's no tag, which is the
+ * common case for content that was never rich-edited. */
+function renderInlineHtml(html: string): ReactNode {
+  if (!/<[a-z]/i.test(html)) return html;
+  const parsed = new DOMParser().parseFromString(html, "text/html");
+  const convert = (node: ChildNode): ReactNode => {
+    if (node.nodeType === Node.TEXT_NODE) return node.textContent;
+    if (node.nodeType !== Node.ELEMENT_NODE) return null;
+    const el = node as HTMLElement;
+    const children = Array.from(el.childNodes).map((child, i) => <Fragment key={i}>{convert(child)}</Fragment>);
+    const tag = el.tagName.toLowerCase();
+    if (tag === "strong" || tag === "b") return <strong>{children}</strong>;
+    if (tag === "em" || tag === "i") return <em>{children}</em>;
+    return <>{children}</>;
+  };
+  return Array.from(parsed.body.childNodes).map((node, i) => <Fragment key={i}>{convert(node)}</Fragment>);
+}
+
 /* ---------------------------------------------------------------
    One document block, with inline suggestion marks and comment anchors.
    --------------------------------------------------------------- */
-function DocBlockView({ block, jobId, audience }: { block: DocBlock; jobId: string; audience: Audience }) {
+function DocBlockView({
+  block,
+  jobId,
+  audience,
+  editable,
+  isActive,
+  onTextChange,
+  onFocusBlock,
+  onEditorReady,
+  onEditorDestroy,
+  onActivity,
+}: {
+  block: DocBlock;
+  jobId: string;
+  audience: Audience;
+  editable: boolean;
+  isActive: boolean;
+  onTextChange: (text: string | string[]) => void;
+  onFocusBlock: () => void;
+  onEditorReady: (editor: Editor) => void;
+  onEditorDestroy: () => void;
+  onActivity: () => void;
+}) {
   const { state, t } = useStore();
   const actions = useDocActions(jobId, audience);
   const suggestions = pendingSuggestionsFor(state, jobId, audience, block.id);
@@ -200,9 +323,12 @@ function DocBlockView({ block, jobId, audience }: { block: DocBlock; jobId: stri
   );
 
   const marked = (text: string) => {
-    const active = suggestions.find((s) => s.oldText && text.includes(s.oldText));
-    if (!active) return text;
-    const [before, ...rest] = text.split(active.oldText);
+    // Demo suggestions are always plain text matched against the block's stripped content — a block
+    // that's been rich-edited (and so may contain `<strong>`/`<em>`) just won't match, same as today.
+    const active = suggestions.find((s) => s.oldText && stripHtml(text).includes(s.oldText));
+    if (!active) return renderInlineHtml(text);
+    const plain = stripHtml(text);
+    const [before, ...rest] = plain.split(active.oldText);
     return (
       <>
         {before}
@@ -216,20 +342,47 @@ function DocBlockView({ block, jobId, audience }: { block: DocBlock; jobId: stri
     );
   };
 
+  const richEditorProps = { onTextChange, onFocusBlock, onEditorReady, onEditorDestroy, onActivity };
+  const richWrapClass = `rich-block-editor kind-${block.kind}${isActive ? " is-focused" : ""}`;
+
   return (
     <div className={`doc-block${openThreadCount > 0 ? " has-comment" : ""}`} data-block-id={block.id}>
-      {block.kind === "h2" && <h2 className="docH">{marked(block.text as string)}</h2>}
-      {block.kind === "h3" && <h3 className="docH3">{marked(block.text as string)}</h3>}
-      {block.kind === "p" && (
-        <p className={`docP${block.role === "requirement" ? "" : " presentation-only"}`}>{marked(block.text as string)}</p>
-      )}
-      {block.kind === "ul" && (
-        <ul className="docList">
-          {(block.text as string[]).map((x, i) => (
-            <li key={i}>{marked(x)}</li>
-          ))}
-        </ul>
-      )}
+      {block.kind === "h2" &&
+        (editable ? (
+          <div className={richWrapClass}>
+            <RichBlockEditor block={block} {...richEditorProps} />
+          </div>
+        ) : (
+          <h2 className="docH">{marked(block.text as string)}</h2>
+        ))}
+      {block.kind === "h3" &&
+        (editable ? (
+          <div className={richWrapClass}>
+            <RichBlockEditor block={block} {...richEditorProps} />
+          </div>
+        ) : (
+          <h3 className="docH3">{marked(block.text as string)}</h3>
+        ))}
+      {block.kind === "p" &&
+        (editable ? (
+          <div className={richWrapClass}>
+            <RichBlockEditor block={block} {...richEditorProps} />
+          </div>
+        ) : (
+          <p className={`docP${block.role === "requirement" ? "" : " presentation-only"}`}>{marked(block.text as string)}</p>
+        ))}
+      {block.kind === "ul" &&
+        (editable ? (
+          <div className={richWrapClass}>
+            <RichBlockEditor block={block} {...richEditorProps} />
+          </div>
+        ) : (
+          <ul className="docList">
+            {(block.text as string[]).map((x, i) => (
+              <li key={i}>{marked(x)}</li>
+            ))}
+          </ul>
+        ))}
       {openThreadCount > 0 && (
         <span
           className="comment-anchor"

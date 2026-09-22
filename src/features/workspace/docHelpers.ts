@@ -97,8 +97,15 @@ export function pendingSuggestionsFor(state: AppState, jobId: string, audience: 
   );
 }
 
+/** Blocks edited through `RichBlockEditor` may hold simple inline HTML (`<strong>`/`<em>`) in `text`
+ * once the user bolds/italicizes something — this strips it back to plain text for contexts that only
+ * ever want a flat string (the outline sidebar, modal previews). */
+export function stripHtml(text: string): string {
+  return text.replace(/<[^>]+>/g, "");
+}
+
 export function blockPlainText(b: DocBlock): string {
-  return Array.isArray(b.text) ? b.text.join(" • ") : b.text;
+  return Array.isArray(b.text) ? b.text.map(stripHtml).join(" • ") : stripHtml(b.text);
 }
 
 interface CanonicalSuggestion {
