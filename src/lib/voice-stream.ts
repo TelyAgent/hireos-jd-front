@@ -6,6 +6,8 @@
  * weren't ported — this panel's mic button and Send button are separate controls, so that fusion isn't
  * needed here.
  */
+import { API_BASE_URL } from "./apiBase";
+
 export type VoiceStreamServerEvent =
   | { type: "ready" }
   | { type: "partial"; text: string }
@@ -97,7 +99,7 @@ export function resolveVoiceStreamUrl(pageUrl: string): string {
   const page = new URL(pageUrl);
   const target = new URL(page.origin);
   target.protocol = page.protocol === "https:" ? "wss:" : "ws:";
-  target.pathname = "/ws/voice-stream";
+  target.pathname = `${API_BASE_URL}ws/voice-stream`;
   target.search = "";
   target.hash = "";
   return target.toString().replace(/\/$/, "");
@@ -206,7 +208,7 @@ export async function openVoiceStream(options: StreamOptions): Promise<VoiceStre
 }
 
 async function defaultFetchTicket(): Promise<TicketResponse> {
-  const response = await fetch("/api/audio/realtime-ticket", { method: "POST" });
+  const response = await fetch(`${API_BASE_URL}api/audio/realtime-ticket`, { method: "POST" });
   if (!response.ok) {
     let detail = "流式语音输入暂不可用。";
     try {

@@ -20,7 +20,10 @@ export interface Person {
   initials: string;
 }
 
-export type HiringStatus = "draft" | "open" | "paused" | "closed" | "archived";
+/** Simplified to two states by design — the Job Library only ever needs to distinguish a job that's
+ * still being drafted from one that's been published; the richer open/paused/closed/archived lifecycle
+ * this replaced is deferred (see the Workflow & Approval / Publication tabs, currently hidden). */
+export type HiringStatus = "draft" | "published";
 export type ApprovalStatus =
   | "not_submitted"
   | "pending"

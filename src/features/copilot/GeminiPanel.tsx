@@ -343,18 +343,19 @@ export function GeminiPanel({ ctx }: { ctx: GeminiCtx }) {
     say(applied ? t("Replaced the selected text") : t("Inserted into the document"));
   };
 
-  const createJobFromDraft = (d: GeminiDraft) => {
-    // Background write to the real backend (which creates a real Job on the Core Record service).
-    // The UI keeps navigating to the local fixture job below — the rest of the app doesn't read real
-    // backend data yet, so this is intentionally non-blocking and its failure doesn't affect the demo.
+  const createJobFromDraft = async (d: GeminiDraft) => {
+    // Confirms the draft as a real Job on the Core Record service and uses its real id, so the job
+    // this navigates to is the same one the Job Library page (which now reads real backend data) will
+    // show. Only falls back to a local-only fixture id if the backend call itself fails.
     const conversationId = state.geminiConversationIds[key];
-    if (conversationId) {
-      void confirmCopilotDraft(conversationId).catch((error) => {
-        console.warn("Copilot confirm-draft (background sync) failed:", error);
-      });
+    let newId: string;
+    try {
+      if (!conversationId) throw new Error("No conversation to confirm.");
+      newId = (await confirmCopilotDraft(conversationId)).jobId;
+    } catch (error) {
+      console.warn("Copilot confirm-draft failed, falling back to a local-only job:", error);
+      newId = uid("job-gen");
     }
-
-    const newId = uid("job-gen");
     mutate((draft) => {
       draft.jobs[newId] = {
         id: newId,

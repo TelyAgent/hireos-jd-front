@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { MainInner } from "../components/AppShell";
 import { Icon } from "../components/ui/Icons";
@@ -14,6 +14,9 @@ import { VersionsTab } from "../features/workspace/VersionsTab";
 import { BlueprintDrawer } from "../features/workspace/BlueprintDrawer";
 import { VersionHistoryModal } from "../features/workspace/VersionHistoryModal";
 import { useSubmitForApproval, useActivateVersion } from "../features/workspace/approvalActions";
+import { nowISO } from "../lib/format";
+import { getJob } from "../features/jobs/jobsApi";
+import { coreJobToLocalJob } from "../features/jobs/jobsMapping";
 import type { Audience } from "../data/types";
 
 const TABS = [
@@ -24,6 +27,11 @@ const TABS = [
   { key: "activity", label: "Activity", icon: "history" },
   { key: "versions", label: "Versions & Impact", icon: "timeline" },
 ] as const;
+
+// Only the Document tab is shown for now — the richer Workflow & Approval / Publication / Attachments /
+// Activity / Versions tabs are deferred in favor of the simple Draft → Published flow (see the header's
+// Publish button below). Their routes/components are untouched, just not linked from the tab bar.
+const VISIBLE_TABS = TABS.filter((x) => x.key === "document");
 
 type TabKey = (typeof TABS)[number]["key"];
 
@@ -37,7 +45,7 @@ const DOC_ALIASES: Record<string, { tab: TabKey; audience?: Audience; blueprint?
 export function JobWorkspacePage() {
   const { id = "", tab: rawTab = "document" } = useParams();
   const [params] = useSearchParams();
-  const { state, t, set, openModal, openDrawer } = useStore();
+  const { state, t, set, mutate, say, openModal, openDrawer } = useStore();
   const navigate = useNavigate();
   const submitForApproval = useSubmitForApproval();
   const activateVersion = useActivateVersion();
@@ -62,7 +70,35 @@ export function JobWorkspacePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, rawTab]);
 
+  // A job created this session (e.g. via Copilot) or opened via a direct link won't be in the local
+  // store after a reload — it's real, backend-held data, so fall back to fetching it by id before
+  // giving up and showing "Job not found".
+  const [remoteChecked, setRemoteChecked] = useState(false);
+  useEffect(() => {
+    if (job || !id) {
+      setRemoteChecked(true);
+      return;
+    }
+    let cancelled = false;
+    getJob(id)
+      .then((core) => {
+        if (cancelled || !core) return;
+        mutate((draft) => {
+          draft.jobs[id] = coreJobToLocalJob(core, draft.jobs[id]);
+        });
+      })
+      .catch((error) => console.warn("Failed to load job from the backend:", error))
+      .finally(() => {
+        if (!cancelled) setRemoteChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, job]);
+
   if (!job) {
+    if (!remoteChecked) return <MainInner>{null}</MainInner>;
     return (
       <MainInner>
         <ErrorState title={t("Job not found")} body={id} />
@@ -105,6 +141,21 @@ export function JobWorkspacePage() {
       );
     }
     return null;
+  };
+
+  const publishJob = () => {
+    mutate((draft) => {
+      const j = draft.jobs[id];
+      if (!j) return;
+      j.hiringStatus = "published";
+      j.updatedAt = nowISO();
+      (draft.activity[id] = draft.activity[id] || []).unshift({
+        at: nowISO(),
+        actor: draft.currentUserId,
+        text: "Published this job.",
+      });
+    });
+    say(t("Job published"));
   };
 
   return (
@@ -155,6 +206,12 @@ export function JobWorkspacePage() {
               {t("Check requirements")}
             </Button>
             {primaryAction()}
+            {job.hiringStatus === "draft" && (
+              <Button variant="primary" onClick={publishJob}>
+                <Icon name="public" />
+                {t("Publish")}
+              </Button>
+            )}
           </div>
           {job.qualityNote && (
             <div className="warning-inline" style={{ margin: "8px 0 0" }}>
@@ -164,7 +221,7 @@ export function JobWorkspacePage() {
           )}
           <div className="jw-header-row2">
             <div className="underline-tabs" style={{ borderBottom: "none", marginBottom: 0 }}>
-              {TABS.map((x) => (
+              {VISIBLE_TABS.map((x) => (
                 <div
                   key={x.key}
                   className={`u-tab${tab === x.key ? " active" : ""}`}

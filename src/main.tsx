@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import { StoreProvider } from "./store/StoreContext";
+import { API_BASE_URL } from "./lib/apiBase";
 import "./index.css";
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null; info: ErrorInfo | null }> {
@@ -40,7 +41,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <StoreProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={API_BASE_URL}>
         <ErrorBoundary>
           <App />
         </ErrorBoundary>

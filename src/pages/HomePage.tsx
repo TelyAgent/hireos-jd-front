@@ -16,9 +16,9 @@ export function HomePage() {
   );
   const wsJobs = Object.values(state.jobs);
   const myOpenJobs = wsJobs.filter(
-    (j) => (j.owner === u || j.hiringManager === u || j.recruiter === u) && j.hiringStatus === "open",
+    (j) => (j.owner === u || j.hiringManager === u || j.recruiter === u) && j.hiringStatus === "published",
   );
-  const hiringNow = wsJobs.filter((j) => j.hiringStatus === "open");
+  const hiringNow = wsJobs.filter((j) => j.hiringStatus === "published");
   const pendingApproval = wsJobs.filter((j) => j.approvalStatus === "pending");
   const recentJobs = wsJobs
     .slice()

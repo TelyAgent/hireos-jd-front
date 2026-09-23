@@ -18,4 +18,4 @@ export const TASKS: HumanTask[] = [
   { id:'task-13', jobId:'job-demo-115', type:'Review / approve JD', title:'Reconcile scope with the existing draft “HR Lead” job (job-demo-101) before this goes external', assignee:'alex', status:'open', priority:'urgent', dueAt:daysFromNow(1,17), createdAt:daysAgo(9) },
 ];
 
-export const SAVED_VIEWS: readonly string[] = ['All Jobs','My Jobs','Hiring Now','Needs My Attention','Drafts','Pending Approval','Recently Updated','Paused','Closed','Archived'];
+export const SAVED_VIEWS: readonly string[] = ['All Jobs','My Jobs','Published','Needs My Attention','Drafts','Pending Approval','Recently Updated'];

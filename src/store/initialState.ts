@@ -1,4 +1,3 @@
-import { JOBS } from "../data/fixtures/jobs";
 import { ROLE_VERSIONS } from "../data/fixtures/roleVersions";
 import { REQUIREMENTS, RESTRICTED } from "../data/fixtures/requirements";
 import { COMMENT_THREADS, DOCUMENTS, SUGGESTIONS } from "../data/fixtures/documents";
@@ -25,7 +24,12 @@ export const initialState: AppState = {
 
   currentUserId: "linh",
 
-  jobs: clone(JOBS),
+  // Job Library shows real jobs only (JobLibraryPage/JobWorkspacePage fetch and merge them in from the
+  // backend) — the old 15-job fixture set has been retired. The other fixtures below (tasks, approvals,
+  // documents, files, ...) still reference those old `job-demo-*` ids for their own demo content;
+  // that's fine, every place that joins against `state.jobs[id]` already degrades gracefully (renders
+  // without the job's name/link) when the id isn't found rather than crashing.
+  jobs: {},
   roleVersions: clone(ROLE_VERSIONS),
   requirements: clone(REQUIREMENTS),
   restricted: clone(RESTRICTED),

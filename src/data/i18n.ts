@@ -138,6 +138,11 @@ export const ZH: Record<string, string> = {
   "No jobs match these filters": "没有符合当前筛选条件的职位",
   "Try a different saved view, or clear filters to see all jobs.": "换一个已保存视图，或清除筛选条件查看全部职位。",
   "Clear filters": "清除筛选",
+  "Delete job": "删除职位",
+  Delete: "删除",
+  Deleted: "已删除",
+  "This cannot be undone.": "此操作无法撤销。",
+  "Couldn't delete this job. Please try again.": "删除职位失败，请重试。",
   "Active version": "生效版本",
   "Draft/Approval": "草稿 / 审批",
   HM: "用人经理",
@@ -430,6 +435,7 @@ export const ZH: Record<string, string> = {
   /* ---------- publication ---------- */
   "External JD channels for this job.": "该职位的对外 JD 发布渠道。",
   Publish: "发布",
+  "Job published": "职位已发布",
   "Not published": "未发布",
   "No external channels have been published for this job yet.": "该职位尚未在任何对外渠道发布。",
   Published: "已发布",
@@ -784,10 +790,7 @@ export const ZH: Record<string, string> = {
      are keyed by `<badge kind>.<English label>`.
      ================================================================ */
   "hiring_status.Draft": "草稿",
-  "hiring_status.Open": "招聘中",
-  "hiring_status.Paused": "已暂停",
-  "hiring_status.Closed": "已关闭",
-  "hiring_status.Archived": "已归档",
+  "hiring_status.Published": "已发布",
 
   "approval_status.Not submitted": "未提交",
   "approval_status.Pending": "审批中",
@@ -847,14 +850,11 @@ export const ZH: Record<string, string> = {
 
   "savedView.All Jobs": "全部职位",
   "savedView.My Jobs": "我的职位",
-  "savedView.Hiring Now": "正在招聘",
+  "savedView.Published": "已发布",
   "savedView.Needs My Attention": "需要我处理",
   "savedView.Drafts": "草稿",
   "savedView.Pending Approval": "待审批",
   "savedView.Recently Updated": "最近更新",
-  "savedView.Paused": "已暂停",
-  "savedView.Closed": "已关闭",
-  "savedView.Archived": "已归档",
 };
 
 /**

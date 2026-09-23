@@ -2,10 +2,11 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { MainInner } from "../components/AppShell";
 import { Icon } from "../components/ui/Icons";
 import { Button, EmptyState, PageHeader, PersonChip, StatusBadge } from "../components/ui/Primitives";
-import { CloseButton, ModalBody, ModalFooter, ModalHeader } from "../components/ui/Overlays";
+import { CloseButton, ConfirmDialog, ModalBody, ModalFooter, ModalHeader } from "../components/ui/Overlays";
 import { useStore } from "../store/StoreContext";
 import { SAVED_VIEWS } from "../data/fixtures/tasks";
 import { fmtRelative, nowISO } from "../lib/format";
+import { deleteJob } from "../features/jobs/jobsApi";
 import type { AppState } from "../store/types";
 import type { HiringStatus, Job } from "../data/types";
 
@@ -31,8 +32,8 @@ export function jobsForSavedView(state: AppState, view: string): Job[] {
   switch (view) {
     case "My Jobs":
       return all.filter((j) => j.owner === u || j.hiringManager === u || j.recruiter === u);
-    case "Hiring Now":
-      return all.filter((j) => j.hiringStatus === "open");
+    case "Published":
+      return all.filter((j) => j.hiringStatus === "published");
     case "Needs My Attention":
       return all.filter(
         (j) =>
@@ -46,12 +47,6 @@ export function jobsForSavedView(state: AppState, view: string): Job[] {
       return all.filter((j) => j.approvalStatus === "pending");
     case "Recently Updated":
       return all.slice().sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-    case "Paused":
-      return all.filter((j) => j.hiringStatus === "paused");
-    case "Closed":
-      return all.filter((j) => j.hiringStatus === "closed");
-    case "Archived":
-      return all.filter((j) => j.hiringStatus === "archived");
     default:
       return all;
   }
@@ -62,8 +57,7 @@ export function nextActionFor(j: Job): string {
   if (j.hiringStatus === "draft" && !j.activeRoleVersionRef) return "Complete requirements";
   if (j.approvalStatus === "pending") return "Awaiting approval";
   if (j.activationStatus === "pending") return "Activation pending";
-  if (j.hiringStatus === "paused") return "Withdrawal in progress";
-  if (j.hiringStatus === "open") return "Hiring in progress";
+  if (j.hiringStatus === "published") return "Hiring in progress";
   return "No action needed";
 }
 
@@ -93,7 +87,7 @@ export function JobLibraryPage() {
   const dropOnBoard = (jobId: string, newStatus: HiringStatus) => {
     const j = state.jobs[jobId];
     if (!j) return;
-    if (newStatus === "open" && !j.activeRoleVersionRef) {
+    if (newStatus === "published" && !j.activeRoleVersionRef) {
       say(t("Cannot open — no confirmed requirements yet. Complete and approve requirements first."), { type: "error" });
       return;
     }
@@ -103,6 +97,28 @@ export function JobLibraryPage() {
       target.updatedAt = nowISO();
     });
     say(`${t("Moved")} ${j.title} → ${t(newStatus.charAt(0).toUpperCase() + newStatus.slice(1), `hiring_status.${newStatus.charAt(0).toUpperCase() + newStatus.slice(1)}`)}`);
+  };
+
+  const confirmDeleteJob = (j: Job) => {
+    openModal(
+      <ConfirmDialog
+        title={t("Delete job")}
+        body={`${t("Delete")} “${j.title}”? ${t("This cannot be undone.")}`}
+        confirmLabel={t("Delete")}
+        danger
+        onConfirm={async () => {
+          try {
+            await deleteJob(j.id);
+            mutate((draft) => {
+              delete draft.jobs[j.id];
+            });
+            say(`${t("Deleted")} “${j.title}”`);
+          } catch (error) {
+            say(error instanceof Error ? error.message : t("Couldn't delete this job. Please try again."), { type: "error" });
+          }
+        }}
+      />,
+    );
   };
 
   return (
@@ -173,6 +189,7 @@ export function JobLibraryPage() {
                 <th>{t("HC")}</th>
                 <th>{t("Next action")}</th>
                 <th>{t("Updated")}</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -201,6 +218,19 @@ export function JobLibraryPage() {
                   <td className="tiny">{j.headcount}</td>
                   <td className="tiny">{t(nextActionFor(j))}</td>
                   <td className="tiny">{fmtRelative(j.updatedAt)}</td>
+                  <td>
+                    <button
+                      className="icon-btn"
+                      title={t("Delete job")}
+                      aria-label={t("Delete job")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        confirmDeleteJob(j);
+                      }}
+                    >
+                      <Icon name="delete" />
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -231,7 +261,7 @@ export function JobLibraryPage() {
         </div>
       ) : view === "board" ? (
         <div className="board-cols">
-          {(["draft", "open", "paused", "closed", "archived"] as HiringStatus[]).map((col) => {
+          {(["draft", "published"] as HiringStatus[]).map((col) => {
             const items = jobs.filter((j) => j.hiringStatus === col);
             const label = col.charAt(0).toUpperCase() + col.slice(1);
             return (

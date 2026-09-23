@@ -5,7 +5,9 @@
  * flow is untouched and keeps using the mock for now.
  */
 
-const BASE = "/api/copilot/conversations";
+import { API_BASE_URL } from "../../lib/apiBase";
+
+const BASE = `${API_BASE_URL}api/copilot/conversations`;
 
 // Idempotency-Key needs real entropy: `lib/format`'s `uid()` is a page-load counter
 // meant for cosmetic demo ids, so replaying the same UI flow (or an extra render

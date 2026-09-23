@@ -33,10 +33,7 @@ type Tone = "neutral" | "success" | "warning" | "danger" | "info" | "ai";
 const BADGE_MAP: Record<string, Record<string, [string, Tone]>> = {
   hiring_status: {
     draft: ["Draft", "neutral"],
-    open: ["Open", "success"],
-    paused: ["Paused", "warning"],
-    closed: ["Closed", "neutral"],
-    archived: ["Archived", "neutral"],
+    published: ["Published", "success"],
   },
   approval_status: {
     not_submitted: ["Not submitted", "neutral"],
